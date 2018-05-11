@@ -1,19 +1,27 @@
-# PushProx [![CircleCI](https://circleci.com/gh/RobustPerception/PushProx.svg?style=shield)](https://circleci.com/gh/RobustPerception/PushProx)
+# PushProx [![CircleCI](https://circleci.com/gh/ieb/PushProx.svg?style=shield)](https://circleci.com/gh/ieb/PushProx)
 
 PushProx is a client and proxy that allows transversing of NAT and other
 similar network topologies by Prometheus, while still following the pull model.
 
 While this is reasonably robust in practice, this is a work in progress.
 
+## This Fork
+
+This fork is a fork of github.com/robustperception/pushprox which changes the way in which clients scrape. Rather than
+have the Prometheus pull determine where the client performs its final scrape from, the final scape URL is speficied
+on the command line of the client. This ensures the client cant be used to scrape any host inside the network boundary where
+the client is running. Other than that the changes are minimal, mostly Docker containers and more extensive help.
+
+
 ## Running
 
 First build the proxy and client:
 
 ```
-go get github.com/robustperception/pushprox/{client,proxy}
-cd ${GOPATH-$HOME/go}/src/github.com/robustperception/pushprox/client
+go get github.com/ieb/pushprox/{client,proxy}
+cd ${GOPATH-$HOME/go}/src/github.com/ieb/pushprox/client
 go build
-cd ${GOPATH-$HOME/go}/src/github.com/robustperception/pushprox/proxy
+cd ${GOPATH-$HOME/go}/src/github.com/ieb/pushprox/proxy
 go build
 ```
 
@@ -25,7 +33,7 @@ Run the proxy somewhere both Prometheus and the clients can get to:
 
 On every target machine run the client, pointing it at the proxy:
 ```
-./client --proxy-url=http://proxy:8080/
+./client --proxy-url=http://proxy:8080/ --pull-url=http://localhost:4502/metrics
 ```
 
 In Prometheus, use the proxy as a `proxy_url`:
@@ -65,5 +73,8 @@ sends it back to the proxy which passes it back to Prometheus.
 There is no authentication or authorisation included, a reverse proxy can be
 put in front though to add these.
 
-Running the client allows those with access to the proxy or the client to access
-all network services on the machine hosting the client.
+In the origial version, running the client allows those with access to the proxy or the client to access
+all network services on the machine hosting the client. 
+
+In this version, the pull url is hard coded on the command line and only allows the client to pull
+from a fixed location.
