@@ -54,6 +54,19 @@ If the target must be scraped over SSL/TLS, add:
 rather than the usual `scheme: https`. Only the default `scheme: http` works with the proxy,
 so this workaround is required.
 
+## Docker files
+
+There are 2 Docker files. Dockerfile.client and Dockerfile.proxy for the client and proxy. The Proxy can
+probably be run as is. The client should be used in annother Dockerfile containing the application copying 
+the client binary into that Dockerfile and running the client as a background process with appropriate
+command line params. Both --proxy-url and --pull-url must be specified, other parameters are optional.
+
+To build the docker files
+````
+docker build -f Dockerfile.client .
+docker build -f Dockerfile.proxy .
+````
+
 ## Service Discovery
 
 The `/clients` endpoint will return a list of all registered clients in the format
