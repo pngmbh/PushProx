@@ -26,16 +26,9 @@ import (
 )
 
 var (
-    app      = kingpin.New("client", "Prometheus PushProx client. \n\n"+
-    	"Will register itself using the FQDN with the PushProx proxy /poll end point \n"+
-    	"When Prometheus pulls it calls PushProx /poll end point which causes clients to \n"+
-    	"return and scrape their pull-url end points, writing the respionse, which are \n"+
-    	"writren into the Prometheus /poll reponse. \n"+
-    	"--pull-url must be set to a URL pull end point where the application is running, typically http://localhost:4502/metrics\n"+
-    	"--proy-url must be set to the base URL of the proxy")
-	myFqdn   = app.Flag("fqdn", "FQDN to register with, typically best to use the default").Default(fqdn.Get()).String()
-	pullURL  = app.Flag("pull-url", "Pull URL to use").Required().String()
-	proxyURL = app.Flag("proxy-url", "Push proxy to talk to.").Required().String()
+	myFqdn   = kingpin.Flag("fqdn", "FQDN to register with, typically best to use the default").Default(fqdn.Get()).String()
+	pullURL  = kingpin.Flag("pull-url", "Pull URL to use").Required().String()
+	proxyURL = kingpin.Flag("proxy-url", "Push proxy to talk to.").Required().String()
 )
 
 type Coordinator struct {
@@ -149,11 +142,18 @@ func loop(c Coordinator) {
 }
 
 func main() {
+    kingpin.CommandLine.Help = "Prometheus PushProx client. \n\n"+
+    	"Will register itself using the FQDN with the PushProx proxy /poll end point \n"+
+    	"When Prometheus pulls it calls PushProx /poll end point which causes clients to \n"+
+    	"return and scrape their pull-url end points, writing the respionse, which are \n"+
+    	"writren into the Prometheus /poll reponse. \n"+
+    	"--pull-url must be set to a URL pull end point where the application is running, typically http://localhost:4502/metrics\n"+
+    	"--proy-url must be set to the base URL of the proxy"
 	allowedLevel := promlog.AllowedLevel{}
 	allowedLevel.Set("info")
 	flag.AddFlags(kingpin.CommandLine, &allowedLevel)
-	app.HelpFlag.Short('h')
-	kingpin.MustParse(app.Parse(os.Args[1:]))
+	kingpin.HelpFlag.Short('h')
+	kingpin.Parse()
 	logger := promlog.New(allowedLevel)
 	coordinator := Coordinator{logger: logger}
 	if *proxyURL == "" {
