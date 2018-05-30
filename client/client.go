@@ -29,6 +29,7 @@ var (
 	myFqdn   = kingpin.Flag("fqdn", "FQDN to register with, typically best to use the default").Default(fqdn.Get()).String()
 	pullURL  = kingpin.Flag("pull-url", "Pull URL to use").Required().String()
 	proxyURL = kingpin.Flag("proxy-url", "Push proxy to talk to.").Required().String()
+	promToken = os.Getenv("PROM_TOKEN")
 )
 
 type Coordinator struct {
@@ -49,6 +50,7 @@ func (c *Coordinator) doScrape(request *http.Request, client *http.Client) {
 	pullU, err := url.Parse(*pullURL)
 	request.URL = pullU;
 	request.URL.RawQuery = params.Encode()
+	request.Header.Set("x-prom-pull-token", promToken)
 
 	scrapeResp, err := client.Do(request)
 	if err != nil {
@@ -137,6 +139,8 @@ func loop(c Coordinator) {
 	level.Info(c.logger).Log("msg", "Got scrape request", "scrape_id", request.Header.Get("id"), "url", request.URL)
 
 	request.RequestURI = ""
+
+	request.Host = ""
 
 	go c.doScrape(request, client)
 }
