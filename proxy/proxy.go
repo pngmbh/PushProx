@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
 
-	"github.com/ieb/pushprox/util"
+	"github.com/adobe/pushprox/util"
 )
 
 var (

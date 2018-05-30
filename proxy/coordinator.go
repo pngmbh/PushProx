@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/ieb/pushprox/util"
+	"github.com/adobe/pushprox/util"
 )
 
 var (
