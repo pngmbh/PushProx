@@ -1,4 +1,4 @@
-package util
+package main
 
 import (
 	"net/http"
@@ -8,6 +8,7 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
+// With certain versions of Kingpin, if flags are not in the main package they dont get processes correctly.
 var (
 	maxScrapeTimeout     = kingpin.Flag("scrape.max-timeout", "Any scrape with a timeout higher than this will have to be clamped to this.").Default("5m").Duration()
 	defaultScrapeTimeout = kingpin.Flag("scrape.default-timeout", "If a scrape lacks a timeout, use this value.").Default("15s").Duration()

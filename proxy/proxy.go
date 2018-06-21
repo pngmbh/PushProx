@@ -18,12 +18,11 @@ import (
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
 
-	"github.com/adobe/pushprox/util"
 )
 
 var (
 	listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for proxy and client requests.").Default(":8080").String()
-)
+) 
 
 func copyHTTPResponse(resp *http.Response, w http.ResponseWriter) {
 	for k, v := range resp.Header {
@@ -49,7 +48,9 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Proxy request
 		if r.URL.Host != "" {
-			ctx, _ := context.WithTimeout(r.Context(), util.GetScrapeTimeout(r.Header))
+			timeout := GetScrapeTimeout(r.Header)
+			level.Debug(logger).Log("msg", "Scraping", "timeout",  timeout)
+			ctx, _ := context.WithTimeout(r.Context(), timeout)
 			request := r.WithContext(ctx)
 			request.RequestURI = ""
 
@@ -67,9 +68,14 @@ func main() {
 		// Client registering and asking for scrapes.
 		if r.URL.Path == "/poll" {
 			fqdn, _ := ioutil.ReadAll(r.Body)
-			request, _ := coordinator.WaitForScrapeInstruction(strings.TrimSpace(string(fqdn)))
-			request.WriteProxy(w) // Send full request as the body of the response.
-			level.Info(logger).Log("msg", "Responded to /poll", "url", request.URL.String(), "scrape_id", request.Header.Get("Id"))
+			request, doscrape := coordinator.WaitForScrapeInstruction(w, strings.TrimSpace(string(fqdn)))
+			if doscrape {
+				request.WriteProxy(w) // Send full request as the body of the response.
+				level.Info(logger).Log("msg", "Responded to /poll", "url", request.URL.String(), "scrape_id", request.Header.Get("Id"))
+			} else {
+				level.Info(logger).Log("msg", "Connection was closed by client ")
+
+			}
 			return
 		}
 

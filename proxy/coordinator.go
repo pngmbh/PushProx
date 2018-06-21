@@ -13,7 +13,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/adobe/pushprox/util"
 )
 
 var (
@@ -65,6 +64,14 @@ func (c *Coordinator) getRequestChannel(fqdn string) chan *http.Request {
 	return ch
 }
 
+// Remove a request channel.
+func (c *Coordinator) removeRequestChannel(fqdn string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.waiting, fqdn)
+}
+
+
 func (c *Coordinator) getResponseChannel(id string) chan *http.Response {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -106,19 +113,33 @@ func (c *Coordinator) DoScrape(ctx context.Context, r *http.Request) (*http.Resp
 }
 
 // Client registering to accept a scrape request. Blocking.
-func (c *Coordinator) WaitForScrapeInstruction(fqdn string) (*http.Request, error) {
-	level.Info(c.logger).Log("msg", "WaitForScrapeInstruction", "fqdn", fqdn)
+func (c *Coordinator) WaitForScrapeInstruction(w http.ResponseWriter, fqdn string) (*http.Request, bool) {
 
 	c.addKnownClient(fqdn)
 	// TODO: What if the client times out?
+	notify := w.(http.CloseNotifier).CloseNotify()
 	ch := c.getRequestChannel(fqdn)
+	// always remove the request channel when scape is done even if the client is gone.
+	defer c.removeRequestChannel(fqdn)
 	for {
-		request := <-ch
 		select {
-		case <-request.Context().Done():
-			// Request has timed out, get another one.
-		default:
-			return request, nil
+		case <-notify:
+			level.Info(c.logger).Log("msg", "WaitForScrapeInstruction", "client closed", fqdn)
+
+			return nil, false
+		case request := <-ch:
+			for {
+				select {
+					case <-notify:
+						level.Info(c.logger).Log("msg", "WaitForScrapeInstruction", "client closed while processing scrape (rare)", fqdn)
+					case <-request.Context().Done():
+						level.Info(c.logger).Log("msg", "WaitForScrapeInstruction", "Timeout waiting for scape ", fqdn)
+					// Request has timed out, get another one.
+					default:
+						level.Info(c.logger).Log("msg", "WaitForScrapeInstruction", "Ok waiting for scrape ", fqdn)
+						return request, true
+				}
+			}
 		}
 	}
 }
@@ -127,7 +148,7 @@ func (c *Coordinator) WaitForScrapeInstruction(fqdn string) (*http.Request, erro
 func (c *Coordinator) ScrapeResult(r *http.Response) error {
 	id := r.Header.Get("Id")
 	level.Info(c.logger).Log("msg", "ScrapeResult", "scrape_id", id)
-	ctx, _ := context.WithTimeout(context.Background(), util.GetScrapeTimeout(r.Header))
+	ctx, _ := context.WithTimeout(context.Background(), GetScrapeTimeout(r.Header))
 	// Don't expose internal headers.
 	r.Header.Del("Id")
 	r.Header.Del("X-Prometheus-Scrape-Timeout-Seconds")
