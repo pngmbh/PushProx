@@ -10,10 +10,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"regexp"
 
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/go-kit/kit/log/level"
+	glog "github.com/go-kit/kit/log"
+
 	"github.com/prometheus/common/log"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/promlog/flag"
@@ -22,6 +25,7 @@ import (
 
 var (
 	listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for proxy and client requests.").Default(":8080").String()
+	loggerName   = kingpin.Flag("loggername", "Logger name to use so that the logs can be filtered").Default("proxyserver").String()
 ) 
 
 func copyHTTPResponse(resp *http.Response, w http.ResponseWriter) {
@@ -43,6 +47,7 @@ func main() {
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 	logger := promlog.New(allowedLevel)
+	logger = glog.With(logger, "logger", *loggerName)
 	coordinator := NewCoordinator(logger)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -54,13 +59,18 @@ func main() {
 			request := r.WithContext(ctx)
 			request.RequestURI = ""
 
-			resp, err := coordinator.DoScrape(ctx, request)
+			resp, err, disconnect := coordinator.DoScrape(ctx, request, w)
+			if disconnect {
+				level.Error(logger).Log("msg", "Scraping: Disconnected")
+				return
+			}
 			if err != nil {
 				level.Error(logger).Log("msg", "Error scraping:", "err", err, "url", request.URL.String())
 				http.Error(w, fmt.Sprintf("Error scraping %q: %s", request.URL.String(), err.Error()), 500)
 				return
 			}
 			defer resp.Body.Close()
+			level.Debug(logger).Log("msg", "Scraping: Sending scrap response")
 			copyHTTPResponse(resp, w)
 			return
 		}
@@ -68,10 +78,17 @@ func main() {
 		// Client registering and asking for scrapes.
 		if r.URL.Path == "/poll" {
 			fqdn, _ := ioutil.ReadAll(r.Body)
-			request, doscrape := coordinator.WaitForScrapeInstruction(w, strings.TrimSpace(string(fqdn)))
+			r, _ := regexp.Compile(":.*$")
+			// the key is the FQDN and the port
+			key := strings.TrimSpace(string(fqdn))
+			if !r.MatchString(key) {
+				// assume port 80 if none specified in teh key.
+				key = key + ":80"
+			}
+			request, doscrape := coordinator.WaitForScrapeInstruction(w, key)
 			if doscrape {
 				request.WriteProxy(w) // Send full request as the body of the response.
-				level.Info(logger).Log("msg", "Responded to /poll", "url", request.URL.String(), "scrape_id", request.Header.Get("Id"))
+				level.Debug(logger).Log("msg", "Responded to /poll", "url", request.URL.String(), "scrape_id", request.Header.Get("Id"))
 			} else {
 				level.Info(logger).Log("msg", "Connection was closed by client ")
 
@@ -83,6 +100,7 @@ func main() {
 		if r.URL.Path == "/push" {
 			buf := &bytes.Buffer{}
 			io.Copy(buf, r.Body)
+
 			scrapeResult, _ := http.ReadResponse(bufio.NewReader(buf), nil)
 			level.Info(logger).Log("msg", "Got /push", "scrape_id", scrapeResult.Header.Get("Id"))
 			err := coordinator.ScrapeResult(scrapeResult)

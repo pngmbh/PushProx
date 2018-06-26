@@ -26,6 +26,7 @@ import (
 
 var (
 	myFqdn   = kingpin.Flag("fqdn", "FQDN to register with, typically best to use the default").Default(fqdn.Get()).String()
+	loggerName   = kingpin.Flag("loggername", "Logger name to use so that the logs can be filtered").Default("proxyclient").String()
 	pullURL  = kingpin.Flag("pull-url", "Pull URL to use").Required().String()
 	proxyURL = kingpin.Flag("proxy-url", "Push proxy to talk to.").Required().String()
 	promToken = os.Getenv("PROM_TOKEN")
@@ -54,7 +55,7 @@ func (c *Coordinator) doScrape(request *http.Request, client *http.Client) {
 	scrapeResp, err := client.Do(request)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to scrape %s: %s", request.URL.String(), err)
-		level.Warn(logger).Log("msg", "Failed to scrape", "Request URL", request.URL.String(), "err", err)
+		level.Warn(logger).Log("msg", msg)
 		resp := &http.Response{
 			StatusCode: 500,
 			Header:     http.Header{},
@@ -62,19 +63,18 @@ func (c *Coordinator) doScrape(request *http.Request, client *http.Client) {
 		}
 		err = c.doPush(resp, request, client)
 		if err != nil {
-			level.Warn(logger).Log("msg", "Failed to push failed scrape response:", "err", err)
+			msg2 := fmt.Sprintf("Failed to push failed scrape response from %s: %s", request.URL.String(), err)
+			level.Warn(logger).Log("msg", msg2)
 			return
 		}
-		level.Info(logger).Log("msg", "Pushed failed scrape response")
 		return
 	}
-	level.Info(logger).Log("msg", "Retrieved scrape response")
 	err = c.doPush(scrapeResp, request, client)
 	if err != nil {
-		level.Warn(logger).Log("msg", "Failed to push scrape response:", "err", err)
+		msg2 := fmt.Sprintf("Failed to push failed scrape response from %s: %s", request.URL.String(), err)
+		level.Warn(logger).Log("msg", msg2)
 		return
 	}
-	level.Info(logger).Log("msg", "Pushed scrape result")
 }
 
 // Report the result of the scrape back up to the proxy.
@@ -158,6 +158,7 @@ func main() {
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 	logger := promlog.New(allowedLevel)
+	logger = log.With(logger, "logger", *loggerName)
 	coordinator := Coordinator{logger: logger}
 	if *proxyURL == "" {
 		level.Error(coordinator.logger).Log("msg", "--proxy-url flag must be specified.")
@@ -172,8 +173,8 @@ func main() {
 		level.Warn(logger).Log("msg", "--pull-url not a valid url valid ", *pullURL, "err", err)
 		os.Exit(1)
 	}
-
-	level.Info(coordinator.logger).Log("msg", "URL and FQDN info", "proxy_url", *proxyURL, "Using FQDN of", *myFqdn, " and Pull URL ", *pullURL)
+	msg := fmt.Sprintf("URL and FQDN info proxy_url %s Using FQDN of %s  and Pull URL %s ", *proxyURL, *myFqdn, *pullURL )
+	level.Info(coordinator.logger).Log("msg", msg)
 	for {
 		loop(coordinator)
 	}
