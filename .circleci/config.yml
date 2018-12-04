@@ -18,6 +18,11 @@ jobs:
               cd /go/src/github.com/adobe/pushprox/client
               go get
               go build
+      - persist_to_workspace:
+          root: ./
+          paths:
+            - proxy/proxy
+            - client/client
       - run:
           name: Download and untar node_exporter
           command: |
@@ -64,3 +69,31 @@ jobs:
               if [ $res == 0 ]; then
                   exit 1
               fi
+  publish-github-release:
+    docker:
+      - image: cibuilds/github:0.10
+    steps:
+      - attach_workspace:
+          at: ./bin
+      - run:
+          name: "Publish Release on GitHub"
+          command: |
+            mkdir out;
+            cp bin/client/client bin/proxy/proxy out/;
+            ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${CIRCLE_TAG} ./out
+workflows:
+  version: 2
+  main:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /.*/
+      - publish-github-release:
+          requires:
+            - build
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /.*/
